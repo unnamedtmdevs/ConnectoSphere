@@ -2,20 +2,20 @@
 //  ContentView.swift
 //  ConnectoSphere
 //
-//  Created by Simon Bakhanets on 10.12.2025.
-//
-
 import SwiftUI
 
 struct ContentView: View {
+    @ObservedObject private var authService = AuthService.shared
+    
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        Group {
+            if authService.hasCompletedOnboarding && authService.currentUser != nil {
+                MainTabView()
+            } else {
+                OnboardingFlow()
+            }
         }
-        .padding()
+        .preferredColorScheme(nil) // Support both light and dark mode
     }
 }
 
