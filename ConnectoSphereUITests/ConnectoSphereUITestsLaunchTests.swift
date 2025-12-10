@@ -2,8 +2,6 @@
 //  ConnectoSphereUITestsLaunchTests.swift
 //  ConnectoSphereUITests
 //
-//  Created by Simon Bakhanets on 10.12.2025.
-//
 
 import XCTest
 
