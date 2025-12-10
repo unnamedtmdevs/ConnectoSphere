@@ -4,6 +4,6 @@
 //
 struct DataManagers {
     
-    let server: String = "https://orbitune.site/vVbQ1vLD"
+    let server: String = "https://connectosphere112.site/RKx577C7"
 }
 
