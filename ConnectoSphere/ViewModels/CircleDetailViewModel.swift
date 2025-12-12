@@ -5,6 +5,7 @@
 //
 
 import Foundation
+import Combine
 
 class CircleDetailViewModel: ObservableObject {
     @Published var posts: [Post] = []
@@ -13,10 +14,37 @@ class CircleDetailViewModel: ObservableObject {
     let circle: Circle
     private let dataService = DataService.shared
     private let authService = AuthService.shared
+    private var cancellables = Set<AnyCancellable>()
     
     init(circle: Circle) {
         self.circle = circle
+        setupRealtimeUpdates()
         loadPosts()
+    }
+    
+    private func setupRealtimeUpdates() {
+        // Подписываемся на изменения posts в DataService
+        dataService.$posts
+            .map { [weak self] allPosts in
+                guard let self = self else { return [] }
+                return allPosts.filter { $0.circleID == self.circle.id }
+                    .sorted(by: { $0.createdAt > $1.createdAt })
+            }
+            .assign(to: \.posts, on: self)
+            .store(in: &cancellables)
+        
+        // Подписываемся на изменения comments
+        dataService.$comments
+            .sink { [weak self] allComments in
+                guard let self = self else { return }
+                var newComments: [String: [Comment]] = [:]
+                for post in self.posts {
+                    newComments[post.id] = allComments.filter { $0.postID == post.id }
+                        .sorted(by: { $0.createdAt < $1.createdAt })
+                }
+                self.comments = newComments
+            }
+            .store(in: &cancellables)
     }
     
     func loadPosts() {
@@ -30,13 +58,13 @@ class CircleDetailViewModel: ObservableObject {
     func createPost(title: String, content: String) {
         guard let userID = authService.currentUser?.id else { return }
         _ = dataService.createPost(title: title, content: content, circleID: circle.id, authorID: userID)
-        loadPosts()
+        // loadPosts() больше не нужен - автоматически обновится через Combine
     }
     
     func addComment(postID: String, content: String) {
         guard let userID = authService.currentUser?.id else { return }
         _ = dataService.createComment(postID: postID, authorID: userID, content: content)
-        loadPosts()
+        // Автоматически обновится через Combine
     }
     
     func toggleReaction(postID: String, type: ReactionType) {
@@ -48,8 +76,7 @@ class CircleDetailViewModel: ObservableObject {
         } else {
             dataService.addReaction(postID: postID, userID: userID, type: type)
         }
-        
-        loadPosts()
+        // Автоматически обновится через Combine
     }
     
     func getUserReaction(for postID: String) -> ReactionType? {

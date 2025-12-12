@@ -5,9 +5,14 @@
 //
 
 import Foundation
+import Combine
 
+// Wrapper для совместимости со старым кодом
 class DataService: ObservableObject {
     static let shared = DataService()
+    
+    private let firebaseData = FirebaseDataService.shared
+    private var cancellables = Set<AnyCancellable>()
     
     @Published var users: [User] = []
     @Published var circles: [Circle] = []
@@ -20,10 +25,25 @@ class DataService: ObservableObject {
     private let commentsKey = "connectosphere_comments"
     
     init() {
-        loadData()
-        if circles.isEmpty {
-            createDefaultCircles()
-        }
+        // Синхронизируем с Firebase Data Service через Combine
+        firebaseData.$circles
+            .assign(to: \.circles, on: self)
+            .store(in: &cancellables)
+        
+        firebaseData.$posts
+            .assign(to: \.posts, on: self)
+            .store(in: &cancellables)
+        
+        firebaseData.$comments
+            .assign(to: \.comments, on: self)
+            .store(in: &cancellables)
+        
+        firebaseData.$users
+            .assign(to: \.users, on: self)
+            .store(in: &cancellables)
+        
+        // Инициализируем default circles
+        firebaseData.initializeDefaultCircles()
     }
     
     // MARK: - Data Persistence
@@ -54,15 +74,8 @@ class DataService: ObservableObject {
     }
     
     func clearAllData() {
-        users = []
-        circles = []
-        posts = []
-        comments = []
-        UserDefaults.standard.removeObject(forKey: usersKey)
-        UserDefaults.standard.removeObject(forKey: circlesKey)
-        UserDefaults.standard.removeObject(forKey: postsKey)
-        UserDefaults.standard.removeObject(forKey: commentsKey)
-        createDefaultCircles()
+        // Теперь управляется через Firebase
+        // Данные очищаются через deleteAccount в FirebaseAuthService
     }
     
     // MARK: - User Management
@@ -85,203 +98,85 @@ class DataService: ObservableObject {
     }
     
     func updateUser(_ user: User) {
-        if let index = users.firstIndex(where: { $0.id == user.id }) {
-            users[index] = user
-            saveData()
-        }
+        FirebaseAuthService.shared.updateUser(user) { _ in }
     }
     
     func getUser(byID id: String) -> User? {
-        users.first(where: { $0.id == id })
+        firebaseData.getUser(byID: id)
     }
     
     // MARK: - Circle Management
     
     func createCircle(name: String, description: String, category: String, tags: [String], creatorID: String) -> Circle {
-        let circle = Circle(
-            id: UUID().uuidString,
-            name: name,
-            description: description,
-            category: category,
-            creatorID: creatorID,
-            memberIDs: [creatorID],
-            postIDs: [],
-            createdAt: Date(),
-            tags: tags
-        )
-        circles.append(circle)
-        saveData()
-        return circle
+        var circle: Circle?
+        firebaseData.createCircle(name: name, description: description, category: category, tags: tags, creatorID: creatorID) { createdCircle in
+            circle = createdCircle
+        }
+        return circle ?? Circle(id: UUID().uuidString, name: name, description: description, category: category, creatorID: creatorID, memberIDs: [creatorID], postIDs: [], createdAt: Date(), tags: tags)
     }
     
     func joinCircle(circleID: String, userID: String) {
-        if let circleIndex = circles.firstIndex(where: { $0.id == circleID }) {
-            if !circles[circleIndex].memberIDs.contains(userID) {
-                circles[circleIndex].memberIDs.append(userID)
+        firebaseData.joinCircle(circleID: circleID, userID: userID) { success in
+            if !success {
+                print("❌ Failed to join circle")
             }
-            if let userIndex = users.firstIndex(where: { $0.id == userID }) {
-                if !users[userIndex].joinedCircleIDs.contains(circleID) {
-                    users[userIndex].joinedCircleIDs.append(circleID)
-                }
-            }
-            saveData()
         }
     }
     
     func leaveCircle(circleID: String, userID: String) {
-        if let circleIndex = circles.firstIndex(where: { $0.id == circleID }) {
-            circles[circleIndex].memberIDs.removeAll(where: { $0 == userID })
+        firebaseData.leaveCircle(circleID: circleID, userID: userID) { success in
+            if !success {
+                print("❌ Failed to leave circle")
+            }
         }
-        if let userIndex = users.firstIndex(where: { $0.id == userID }) {
-            users[userIndex].joinedCircleIDs.removeAll(where: { $0 == circleID })
-        }
-        saveData()
     }
     
     func getUserCircles(userID: String) -> [Circle] {
-        guard let user = getUser(byID: userID) else { return [] }
-        return circles.filter { user.joinedCircleIDs.contains($0.id) }
+        firebaseData.getUserCircles(userID: userID)
     }
     
     // MARK: - Post Management
     
     func createPost(title: String, content: String, circleID: String, authorID: String) -> Post {
-        let post = Post(
-            id: UUID().uuidString,
-            authorID: authorID,
-            circleID: circleID,
-            content: content,
-            title: title,
-            reactions: [],
-            commentIDs: [],
-            createdAt: Date()
-        )
-        posts.append(post)
-        
-        if let circleIndex = circles.firstIndex(where: { $0.id == circleID }) {
-            circles[circleIndex].postIDs.append(post.id)
+        var post: Post?
+        firebaseData.createPost(title: title, content: content, circleID: circleID, authorID: authorID) { createdPost in
+            post = createdPost
         }
-        
-        saveData()
-        return post
+        return post ?? Post(id: UUID().uuidString, authorID: authorID, circleID: circleID, content: content, title: title, reactions: [], commentIDs: [], createdAt: Date())
     }
     
     func addReaction(postID: String, userID: String, type: ReactionType) {
-        if let postIndex = posts.firstIndex(where: { $0.id == postID }) {
-            // Remove existing reaction from this user
-            posts[postIndex].reactions.removeAll(where: { $0.userID == userID })
-            // Add new reaction
-            let reaction = Reaction(userID: userID, type: type, timestamp: Date())
-            posts[postIndex].reactions.append(reaction)
-            saveData()
-        }
+        firebaseData.addReaction(postID: postID, userID: userID, type: type) { _ in }
     }
     
     func removeReaction(postID: String, userID: String) {
-        if let postIndex = posts.firstIndex(where: { $0.id == postID }) {
-            posts[postIndex].reactions.removeAll(where: { $0.userID == userID })
-            saveData()
-        }
+        firebaseData.removeReaction(postID: postID, userID: userID) { _ in }
     }
     
     func getCirclePosts(circleID: String) -> [Post] {
-        posts.filter { $0.circleID == circleID }.sorted(by: { $0.createdAt > $1.createdAt })
+        firebaseData.getCirclePosts(circleID: circleID)
     }
     
     func getFeedPosts(userID: String) -> [Post] {
-        guard let user = getUser(byID: userID) else { return [] }
-        return posts
-            .filter { user.joinedCircleIDs.contains($0.circleID) }
-            .sorted(by: { $0.createdAt > $1.createdAt })
+        firebaseData.getFeedPosts(userID: userID)
     }
     
     // MARK: - Comment Management
     
     func createComment(postID: String, authorID: String, content: String) -> Comment {
-        let comment = Comment(
-            id: UUID().uuidString,
-            authorID: authorID,
-            postID: postID,
-            content: content,
-            createdAt: Date()
-        )
-        comments.append(comment)
-        
-        if let postIndex = posts.firstIndex(where: { $0.id == postID }) {
-            posts[postIndex].commentIDs.append(comment.id)
+        var comment: Comment?
+        firebaseData.createComment(postID: postID, authorID: authorID, content: content) { createdComment in
+            comment = createdComment
         }
-        
-        saveData()
-        return comment
+        return comment ?? Comment(id: UUID().uuidString, authorID: authorID, postID: postID, content: content, createdAt: Date())
     }
     
     func getPostComments(postID: String) -> [Comment] {
-        comments.filter { $0.postID == postID }.sorted(by: { $0.createdAt < $1.createdAt })
+        firebaseData.getPostComments(postID: postID)
     }
     
     // MARK: - Default Data
     
-    private func createDefaultCircles() {
-        let sampleCircles = [
-            Circle(
-                id: UUID().uuidString,
-                name: "Tech Enthusiasts",
-                description: "Discuss the latest in technology, programming, and innovation",
-                category: "Technology",
-                creatorID: "system",
-                memberIDs: [],
-                postIDs: [],
-                createdAt: Date(),
-                tags: ["tech", "programming", "innovation"]
-            ),
-            Circle(
-                id: UUID().uuidString,
-                name: "Book Lovers",
-                description: "Share your favorite reads and literary discoveries",
-                category: "Literature",
-                creatorID: "system",
-                memberIDs: [],
-                postIDs: [],
-                createdAt: Date(),
-                tags: ["books", "reading", "literature"]
-            ),
-            Circle(
-                id: UUID().uuidString,
-                name: "Fitness & Wellness",
-                description: "Connect with others on their health and fitness journey",
-                category: "Health",
-                creatorID: "system",
-                memberIDs: [],
-                postIDs: [],
-                createdAt: Date(),
-                tags: ["fitness", "health", "wellness"]
-            ),
-            Circle(
-                id: UUID().uuidString,
-                name: "Creative Arts",
-                description: "Share and appreciate art, music, and creative expression",
-                category: "Arts",
-                creatorID: "system",
-                memberIDs: [],
-                postIDs: [],
-                createdAt: Date(),
-                tags: ["art", "music", "creativity"]
-            ),
-            Circle(
-                id: UUID().uuidString,
-                name: "Travel & Adventure",
-                description: "Explore the world together and share travel experiences",
-                category: "Travel",
-                creatorID: "system",
-                memberIDs: [],
-                postIDs: [],
-                createdAt: Date(),
-                tags: ["travel", "adventure", "explore"]
-            )
-        ]
-        
-        circles = sampleCircles
-        saveData()
-    }
+    // Удалено - теперь используется Firebase
 }
 

@@ -5,6 +5,7 @@
 //
 
 import Foundation
+import Combine
 
 class CirclesViewModel: ObservableObject {
     @Published var allCircles: [Circle] = []
@@ -13,6 +14,7 @@ class CirclesViewModel: ObservableObject {
     
     private let dataService = DataService.shared
     private let authService = AuthService.shared
+    private var cancellables = Set<AnyCancellable>()
     
     var filteredCircles: [Circle] {
         if searchText.isEmpty {
@@ -26,7 +28,27 @@ class CirclesViewModel: ObservableObject {
     }
     
     init() {
+        setupRealtimeUpdates()
         loadCircles()
+    }
+    
+    private func setupRealtimeUpdates() {
+        // Подписываемся на изменения circles
+        dataService.$circles
+            .assign(to: \.allCircles, on: self)
+            .store(in: &cancellables)
+        
+        // Подписываемся на изменения myCircles
+        Publishers.CombineLatest(
+            dataService.$circles,
+            authService.$currentUser
+        )
+        .map { circles, currentUser in
+            guard let userID = currentUser?.id else { return [] }
+            return circles.filter { $0.memberIDs.contains(userID) }
+        }
+        .assign(to: \.myCircles, on: self)
+        .store(in: &cancellables)
     }
     
     func loadCircles() {
@@ -38,13 +60,13 @@ class CirclesViewModel: ObservableObject {
     func joinCircle(_ circle: Circle) {
         guard let userID = authService.currentUser?.id else { return }
         dataService.joinCircle(circleID: circle.id, userID: userID)
-        loadCircles()
+        // Автоматически обновится через Combine
     }
     
     func leaveCircle(_ circle: Circle) {
         guard let userID = authService.currentUser?.id else { return }
         dataService.leaveCircle(circleID: circle.id, userID: userID)
-        loadCircles()
+        // Автоматически обновится через Combine
     }
     
     func isUserMember(of circle: Circle) -> Bool {
@@ -61,7 +83,7 @@ class CirclesViewModel: ObservableObject {
             tags: tags,
             creatorID: userID
         )
-        loadCircles()
+        // Автоматически обновится через Combine
     }
 }
 

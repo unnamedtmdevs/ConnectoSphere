@@ -15,10 +15,30 @@ class HomeViewModel: ObservableObject {
     private let dataService = DataService.shared
     private let connectionService = ConnectionService.shared
     private let authService = AuthService.shared
+    private var cancellables = Set<AnyCancellable>()
     
     init() {
+        setupRealtimeUpdates()
         loadFeed()
         loadSuggestedConnections()
+    }
+    
+    private func setupRealtimeUpdates() {
+        // Подписываемся на изменения posts и circles для автоматического обновления фида
+        Publishers.CombineLatest3(
+            dataService.$posts,
+            dataService.$circles,
+            authService.$currentUser
+        )
+        .map { [weak self] posts, circles, currentUser in
+            guard let self = self, let userID = currentUser?.id else { return [] }
+            let userCircleIDs = circles.filter { $0.memberIDs.contains(userID) }.map { $0.id }
+            return posts
+                .filter { userCircleIDs.contains($0.circleID) }
+                .sorted(by: { $0.createdAt > $1.createdAt })
+        }
+        .assign(to: \.feedPosts, on: self)
+        .store(in: &cancellables)
     }
     
     func loadFeed() {
@@ -42,8 +62,7 @@ class HomeViewModel: ObservableObject {
         } else {
             dataService.addReaction(postID: postID, userID: userID, type: type)
         }
-        
-        loadFeed()
+        // Автоматически обновится через Combine
     }
     
     func getUserReaction(for postID: String) -> ReactionType? {
