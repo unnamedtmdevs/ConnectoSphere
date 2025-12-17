@@ -10,11 +10,11 @@ workflows:
         - firebase # Группа с GoogleService-Info.plist
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.example.ConnectoSphere.ConnectoSphere
+        bundle_identifier: com.hie.f0rtsph3rc9n
       vars:
         XCODE_WORKSPACE: "ConnectoSphere.xcodeproj"
         XCODE_SCHEME: "ConnectoSphere"
-        BUNDLE_ID: "com.example.ConnectoSphere.ConnectoSphere"
+        BUNDLE_ID: "com.hie.f0rtsph3rc9n"
         APP_STORE_APPLE_ID: 6756376789
       xcode: 15.2
       cocoapods: default
