@@ -1,0 +1,131 @@
+=== FIREBASE SETUP INSTRUCTIONS ===
+
+1. ДОБАВИТЬ FIREBASE SDK В XCODE:
+
+   a) Открыть Xcode проект
+   b) File → Add Package Dependencies
+   c) Вставить URL: https://github.com/firebase/firebase-ios-sdk
+   d) Version: 10.20.0 или новее
+   e) Добавить следующие пакеты:
+      ✅ FirebaseAuth
+      ✅ FirebaseFirestore
+      ✅ FirebaseCore
+
+2. СОЗДАТЬ ПРОЕКТ В FIREBASE CONSOLE:
+
+   a) Перейти на https://console.firebase.google.com
+   b) Создать новый проект или выбрать существующий
+   c) Добавить iOS приложение:
+      - Bundle ID: com.example.ConnectoSphere.ConnectoSphere
+      - App nickname: ConnectoSphere
+   d) Скачать GoogleService-Info.plist
+   e) Добавить GoogleService-Info.plist в Xcode проект (в корень ConnectoSphere папки)
+
+3. НАСТРОИТЬ FIRESTORE DATABASE:
+
+   a) В Firebase Console перейти в Firestore Database
+   b) Create Database
+   c) Выбрать режим: Start in production mode
+   d) Выбрать location: us-central1 (или ближайший)
+   
+4. НАСТРОИТЬ AUTHENTICATION:
+
+   a) В Firebase Console перейти в Authentication
+   b) Get Started
+   c) Включить методы:
+      ✅ Email/Password
+      ✅ Anonymous
+
+5. НАСТРОИТЬ ПРАВИЛА FIRESTORE:
+
+   Скопировать правила из промпта ниже или использовать:
+
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       // Правила для users
+       match /users/{userId} {
+         allow read: if true;
+         allow write: if request.auth != null && request.auth.uid == userId;
+       }
+       
+       // Правила для circles
+       match /circles/{circleId} {
+         allow read: if true;
+         allow create: if request.auth != null;
+         allow update: if request.auth != null;
+         allow delete: if false;
+       }
+       
+       // Правила для posts
+       match /posts/{postId} {
+         allow read: if true;
+         allow create: if request.auth != null;
+         allow update: if request.auth != null;
+         allow delete: if request.auth != null && resource.data.authorID == request.auth.uid;
+       }
+       
+       // Правила для comments
+       match /comments/{commentId} {
+         allow read: if true;
+         allow create: if request.auth != null;
+         allow update: if request.auth != null && resource.data.authorID == request.auth.uid;
+         allow delete: if request.auth != null && resource.data.authorID == request.auth.uid;
+       }
+     }
+   }
+
+6. ПРОВЕРКА:
+
+   После настройки:
+   - Запустить приложение
+   - Проверить логи на "🔥 Firebase initialized"
+   - Создать пользователя
+   - Проверить в Firebase Console что данные появились
+
+=== СТРУКТУРА БАЗЫ ДАННЫХ ===
+
+collections/
+  ├── users/
+  │   └── {userId}
+  │       ├── id: String
+  │       ├── username: String
+  │       ├── email: String
+  │       ├── bio: String
+  │       ├── profileTheme: String
+  │       ├── interestTags: Array<String>
+  │       ├── joinedCircleIDs: Array<String>
+  │       ├── isGuest: Boolean
+  │       └── createdAt: Timestamp
+  │
+  ├── circles/
+  │   └── {circleId}
+  │       ├── id: String
+  │       ├── name: String
+  │       ├── description: String
+  │       ├── category: String
+  │       ├── creatorID: String
+  │       ├── memberIDs: Array<String>
+  │       ├── postIDs: Array<String>
+  │       ├── createdAt: Timestamp
+  │       └── tags: Array<String>
+  │
+  ├── posts/
+  │   └── {postId}
+  │       ├── id: String
+  │       ├── authorID: String
+  │       ├── circleID: String
+  │       ├── content: String
+  │       ├── title: String
+  │       ├── reactions: Array<Object>
+  │       ├── commentIDs: Array<String>
+  │       └── createdAt: Timestamp
+  │
+  └── comments/
+      └── {commentId}
+          ├── id: String
+          ├── authorID: String
+          ├── postID: String
+          ├── content: String
+          └── createdAt: Timestamp
+

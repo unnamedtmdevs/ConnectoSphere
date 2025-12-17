@@ -1,0 +1,199 @@
+=== ПРОМПТ ДЛЯ НАСТРОЙКИ FIREBASE CONSOLE ===
+
+Скопируй и используй этот промпт в Firebase Console для быстрой настройки:
+
+---
+
+Я создаю iOS социальную сеть "ConnectoSphere". Мне нужно настроить Firebase Firestore для следующей структуры:
+
+КОЛЛЕКЦИИ:
+
+1. users
+   - id (String)
+   - username (String)
+   - email (String)
+   - bio (String)
+   - profileTheme (String)
+   - interestTags (Array<String>)
+   - joinedCircleIDs (Array<String>)
+   - isGuest (Boolean)
+   - createdAt (Timestamp)
+
+2. circles
+   - id (String)
+   - name (String)
+   - description (String)
+   - category (String)
+   - creatorID (String)
+   - memberIDs (Array<String>)
+   - postIDs (Array<String>)
+   - createdAt (Timestamp)
+   - tags (Array<String>)
+
+3. posts
+   - id (String)
+   - authorID (String)
+   - circleID (String)
+   - content (String)
+   - title (String)
+   - reactions (Array<Map>) - каждый элемент: {userID: String, type: String, timestamp: Timestamp}
+   - commentIDs (Array<String>)
+   - createdAt (Timestamp)
+
+4. comments
+   - id (String)
+   - authorID (String)
+   - postID (String)
+   - content (String)
+   - createdAt (Timestamp)
+
+ПРАВИЛА БЕЗОПАСНОСТИ FIRESTORE:
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Users - читать могут все, писать только свой профиль
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Circles - читать все, создавать авторизованные, обновлять авторизованные
+    match /circles/{circleId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if false; // Запрещаем удаление
+    }
+    
+    // Posts - читать все, создавать авторизованные, удалять только автор
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null && 
+                       resource.data.authorID == request.auth.uid;
+    }
+    
+    // Comments - читать все, создавать авторизованные, изменять/удалять только автор
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && 
+                       resource.data.authorID == request.auth.uid;
+      allow delete: if request.auth != null && 
+                       resource.data.authorID == request.auth.uid;
+    }
+  }
+}
+
+ИНДЕКСЫ (для оптимизации запросов):
+
+1. Collection: posts
+   Fields: circleID (Ascending), createdAt (Descending)
+   Query scope: Collection
+
+2. Collection: comments
+   Fields: postID (Ascending), createdAt (Ascending)
+   Query scope: Collection
+
+3. Collection: circles
+   Fields: memberIDs (Array-contains), createdAt (Descending)
+   Query scope: Collection
+
+AUTHENTICATION МЕТОДЫ:
+
+✅ Email/Password - включить
+✅ Anonymous - включить
+
+СТАРТОВЫЕ ДАННЫЕ (Default Circles):
+
+Создать 5 circles с id, name, description, category, creatorID = "system", memberIDs = [], postIDs = [], tags:
+
+1. Tech Enthusiasts
+   - description: "Discuss the latest in technology, programming, and innovation"
+   - category: "Technology"
+   - tags: ["tech", "programming", "innovation"]
+
+2. Book Lovers
+   - description: "Share your favorite reads and literary discoveries"
+   - category: "Literature"
+   - tags: ["books", "reading", "literature"]
+
+3. Fitness & Wellness
+   - description: "Connect with others on their health and fitness journey"
+   - category: "Health"
+   - tags: ["fitness", "health", "wellness"]
+
+4. Creative Arts
+   - description: "Share and appreciate art, music, and creative expression"
+   - category: "Arts"
+   - tags: ["art", "music", "creativity"]
+
+5. Travel & Adventure
+   - description: "Explore the world together and share travel experiences"
+   - category: "Travel"
+   - tags: ["travel", "adventure", "explore"]
+
+НАСТРОЙКИ ПРОЕКТА:
+
+- Bundle ID: com.example.ConnectoSphere.ConnectoSphere
+- App Name: ConnectoSphere
+- Platform: iOS
+- Location: us-central1 (или ближайший регион)
+
+---
+
+ПОСЛЕ СОЗДАНИЯ ПРОЕКТА:
+
+1. Скачать GoogleService-Info.plist
+2. Добавить файл в Xcode проект (папка ConnectoSphere)
+3. Убедиться что файл добавлен в Target ConnectoSphere
+4. Запустить приложение и проверить инициализацию Firebase
+
+===
+
+QUICK COMMANDS FOR FIREBASE CLI (опционально):
+
+# Install Firebase CLI
+npm install -g firebase-tools
+
+# Login
+firebase login
+
+# Deploy Firestore rules
+firebase deploy --only firestore:rules
+
+# Deploy Firestore indexes
+firebase deploy --only firestore:indexes
+
+===
+
+TESTING CHECKLIST:
+
+После настройки проверь:
+
+✅ Firebase инициализируется (лог: "🔥 Firebase initialized")
+✅ Anonymous authentication работает
+✅ Email authentication работает
+✅ Создание пользователя в Firestore
+✅ Создание circles
+✅ Создание posts
+✅ Создание comments
+✅ Realtime обновления (открыть на 2 устройствах)
+✅ Reactions работают
+✅ Join/Leave circles работает
+
+===
+
+МОНИТОРИНГ:
+
+После запуска следи за:
+- Firebase Console → Firestore → Data
+- Firebase Console → Authentication → Users
+- Firebase Console → Usage (квоты)
+- Xcode Console (ошибки Firebase)
+
+===
+

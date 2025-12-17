@@ -1,0 +1,135 @@
+workflows:
+  ios-workflow:
+    name: iOS Workflow
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: ConnectoSphere
+    environment:
+      groups:
+        - firebase # Группа с GoogleService-Info.plist
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.example.ConnectoSphere.ConnectoSphere
+      vars:
+        XCODE_WORKSPACE: "ConnectoSphere.xcodeproj"
+        XCODE_SCHEME: "ConnectoSphere"
+        BUNDLE_ID: "com.example.ConnectoSphere.ConnectoSphere"
+        APP_STORE_APPLE_ID: 6756376789
+      xcode: 15.2
+      cocoapods: default
+    scripts:
+      - name: Add Firebase configuration
+        script: |
+          echo "Adding Firebase GoogleService-Info.plist..."
+          # Если загрузил как File в Codemagic
+          if [ -f "$CM_BUILD_DIR/GoogleService-Info.plist" ]; then
+            cp "$CM_BUILD_DIR/GoogleService-Info.plist" "$CM_BUILD_DIR/ConnectoSphere/"
+          fi
+          # Если загрузил как переменную окружения
+          if [ ! -z "$GOOGLE_SERVICE_INFO_PLIST" ]; then
+            echo "$GOOGLE_SERVICE_INFO_PLIST" > "$CM_BUILD_DIR/ConnectoSphere/GoogleService-Info.plist"
+          fi
+          ls -la "$CM_BUILD_DIR/ConnectoSphere/" | grep GoogleService
+          
+      - name: Set up provisioning profiles
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+      
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles
+      
+      - name: Increment build number
+        script: |
+          cd $CM_BUILD_DIR
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
+          agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
+      
+      - name: Install dependencies
+        script: |
+          # Firebase SDK будет установлен через SPM автоматически
+          xcodebuild -resolvePackageDependencies -project "$XCODE_WORKSPACE"
+      
+      - name: Build ipa for distribution
+        script: |
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+    
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    
+    publishing:
+      email:
+        recipients:
+          - trandieulinh0515@icloud.com
+        notify:
+          success: true
+          failure: true
+      
+      app_store_connect:
+        auth: integration
+        
+        # Автоматическая отправка в TestFlight
+        submit_to_testflight: true
+        
+        # Включить beta review (если хочешь сразу internal testing)
+        beta_review: 
+          enable: true
+        
+        # Опционально: автоматическая отправка на App Store review
+        # submit_to_app_store: true
+
+  # Workflow для Pull Requests (только build, без deploy)
+  ios-pr-workflow:
+    name: iOS PR Build
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    triggering:
+      events:
+        - pull_request
+      branch_patterns:
+        - pattern: '*'
+          include: true
+    environment:
+      xcode: 15.2
+      vars:
+        XCODE_WORKSPACE: "ConnectoSphere.xcodeproj"
+        XCODE_SCHEME: "ConnectoSphere"
+    scripts:
+      - name: Install dependencies
+        script: |
+          xcodebuild -resolvePackageDependencies -project "$XCODE_WORKSPACE"
+      
+      - name: Build for testing
+        script: |
+          xcodebuild build \
+            -project "$XCODE_WORKSPACE" \
+            -scheme "$XCODE_SCHEME" \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
+      
+      - name: Run tests (if available)
+        script: |
+          xcodebuild test \
+            -project "$XCODE_WORKSPACE" \
+            -scheme "$XCODE_SCHEME" \
+            -sdk iphonesimulator \
+            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            CODE_SIGNING_ALLOWED=NO || true
+    
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com
+        notify:
+          success: false
+          failure: true
+
