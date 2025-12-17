@@ -79,10 +79,6 @@ workflows:
         # Автоматическая отправка в TestFlight
         submit_to_testflight: true
         
-        # Включить beta review (если хочешь сразу internal testing)
-        beta_review: 
-          enable: true
-        
         # Опционально: автоматическая отправка на App Store review
         # submit_to_app_store: true
 
