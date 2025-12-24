@@ -33,6 +33,13 @@ workflows:
         script: |
           keychain initialize
       
+      - name: Set up signing certificate
+        script: |
+          echo "Setting up signing certificate..."
+          app-store-connect create-certificate \
+            --type IOS_DISTRIBUTION \
+            --save || echo "Certificate already exists, continuing..."
+      
       - name: Fetch signing files from App Store Connect
         script: |
           echo "Fetching/creating signing files for bundle: $BUNDLE_ID"
