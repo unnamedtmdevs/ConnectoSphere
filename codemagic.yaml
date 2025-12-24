@@ -34,10 +34,11 @@ workflows:
           
       - name: Set up provisioning profiles
         script: |
+          echo "Fetching existing signing files for bundle: $BUNDLE_ID"
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --platform IOS \
             --type IOS_APP_STORE \
-            --create
+            --verbose
       
       - name: Set up code signing settings on Xcode project
         script: |
