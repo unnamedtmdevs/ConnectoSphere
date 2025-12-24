@@ -8,9 +8,6 @@ workflows:
     environment:
       groups:
         - firebase # Группа с GoogleService-Info.plist
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.hie.f0rtsph3rc9n
       vars:
         XCODE_WORKSPACE: "ConnectoSphere.xcodeproj"
         XCODE_SCHEME: "ConnectoSphere"
@@ -32,13 +29,21 @@ workflows:
           fi
           ls -la "$CM_BUILD_DIR/ConnectoSphere/" | grep GoogleService
           
-      - name: Set up provisioning profiles
+      - name: Initialize keychain
         script: |
-          echo "Fetching existing signing files for bundle: $BUNDLE_ID"
+          keychain initialize
+      
+      - name: Fetch signing files from App Store Connect
+        script: |
+          echo "Fetching/creating signing files for bundle: $BUNDLE_ID"
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --platform IOS \
             --type IOS_APP_STORE \
-            --verbose
+            --create
+      
+      - name: Add certificates to keychain
+        script: |
+          keychain add-certificates
       
       - name: Set up code signing settings on Xcode project
         script: |
